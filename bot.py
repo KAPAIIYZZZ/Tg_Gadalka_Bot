@@ -30,18 +30,17 @@ async def start(message: types.Message):
 @dp.message(lambda m: m.text == "🔮 Получить предсказание")
 async def prediction(message: types.Message):
     user_id = message.from_user.id
-    username = message.from_user.username  # Получаем имя пользователя
     today = date.today()
 
-    # 🔒 Проверка: уже получал сегодня, кроме моего аккаунта
-    if username != "evgeny_pashkin":  # Бесконечные предсказания для меня
-        if user_last_request.get(user_id) == today:
-            await message.answer(
-                "✨ Сегодня судьба уже сказала своё слово.\n"
-                "Возвращайся за новым предсказанием завтра 🔮"
-            )
-            return
-        user_last_request[user_id] = today
+    # 🔒 Проверка: уже получал сегодня
+    if user_last_request.get(user_id) == today:
+        await message.answer(
+            "✨ Сегодня судьба уже сказала своё слово.\n"
+            "Возвращайся за новым предсказанием завтра 🔮"
+        )
+        return
+
+    user_last_request[user_id] = today
 
     # 🎲 Делаем URL уникальным, чтобы картинки были разные
     random_number = random.randint(1, 1_000_000)
