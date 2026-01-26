@@ -44,9 +44,8 @@ async def prediction(message: types.Message):
         # Обновляем только для обычных пользователей
         user_last_request[user_id] = today
 
-    # 🎲 Делаем URL уникальным и используем тег для эмоций человека
+    # 🎲 Делаем URL уникальным и используем **только тег emotion**
     random_number = random.randint(1, 1_000_000)
-    # Тег "face" и "emotion" в LoremFlickr даёт крупные планы эмоций человека
     image_url = f"https://loremflickr.com/600/800/emotion?random={random_number}"
 
     await message.answer_photo(photo=image_url)
