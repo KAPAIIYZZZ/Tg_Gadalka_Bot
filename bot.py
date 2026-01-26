@@ -103,13 +103,16 @@ async def start(message: types.Message):
 @dp.message(lambda m: m.text == "🔮 Получить предсказание")
 async def prediction(message: types.Message):
     user_id = message.from_user.id
+    username = message.from_user.username  # получаем username
     today = date.today()
 
-    if user_last_request.get(user_id) == today:
-        await message.answer("Сегодня ты уже получил предсказание. Оно ещё не сказало своё последнее слово.")
-        return
+    # Проверка исключения
+    if username != "evgeny_pashkin":
+        if user_last_request.get(user_id) == today:
+            await message.answer("Сегодня ты уже получил предсказание. Оно ещё не сказало своё последнее слово.")
+            return
 
-    user_last_request[user_id] = today
+        user_last_request[user_id] = today
 
     text = generate_fortune_text()
     image_path = generate_image(text)
