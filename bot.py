@@ -8,13 +8,16 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
+# --- Настройка токена ---
 TOKEN = os.getenv("BOT_TOKEN")
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
+# --- Ограничение 1 раз в день ---
 user_last_request = {}
 
+# --- Клавиатура ---
 keyboard = ReplyKeyboardMarkup(
     keyboard=[[KeyboardButton(text="🔮 Получить предсказание")]],
     resize_keyboard=True
@@ -54,6 +57,7 @@ PART_2 = [
 ]
 
 def generate_fortune_text():
+    """Возвращает случайное предсказание"""
     return f"{random.choice(PART_1)}, {random.choice(PART_2)}."
 
 # ---------- ГЕНЕРАЦИЯ КАРТИНКИ С РАНДОМНЫМ ФОНОМ ----------
@@ -61,14 +65,14 @@ def generate_fortune_text():
 def generate_image(text: str) -> str:
     width, height = 800, 800
 
-    # Случайные цвета для градиента фона
+    # Случайные цвета для градиента
     top_color = tuple(random.randint(200, 255) for _ in range(3))
     bottom_color = tuple(random.randint(180, 230) for _ in range(3))
 
     image = Image.new("RGB", (width, height), top_color)
     draw = ImageDraw.Draw(image)
 
-    # Рисуем вертикальный градиент
+    # Вертикальный градиент
     for i in range(height):
         ratio = i / height
         r = int(top_color[0] * (1 - ratio) + bottom_color[0] * ratio)
@@ -76,16 +80,16 @@ def generate_image(text: str) -> str:
         b = int(top_color[2] * (1 - ratio) + bottom_color[2] * ratio)
         draw.line([(0, i), (width, i)], fill=(r, g, b))
 
-    # Шрифт
-    font_path = "fonts/Roboto-Regular.ttf"  # убедись, что файл есть в папке fonts
+    # Локальный шрифт
+    font_path = "fonts/Roboto-Regular.ttf"
     font_size = 60
     font = ImageFont.truetype(font_path, font_size)
 
-    # Перенос текста и динамический размер
+    # Автоматический перенос текста
     margin = 60
     max_text_width = width - 2 * margin
 
-    # Уменьшаем шрифт, если текст слишком длинный
+    # Динамический шрифт: уменьшаем, если не помещается
     while True:
         lines = wrap_text(text, font, max_text_width)
         total_text_height = len(lines) * font_size * 1.2
@@ -94,12 +98,12 @@ def generate_image(text: str) -> str:
         font_size -= 2
         font = ImageFont.truetype(font_path, font_size)
 
-    # Центрирование по вертикали
+    # Центрирование вертикально
     current_height = (height - total_text_height) // 2
 
     for line in lines:
-        line_width, line_height = draw.textsize(line, font=font)
-        x = (width - line_width) // 2  # центр по горизонтали
+        line_width, _ = draw.textsize(line, font=font)
+        x = (width - line_width) // 2
         draw.text((x, current_height), line, fill=(30, 30, 60), font=font)
         current_height += int(font_size * 1.2)
 
@@ -133,6 +137,7 @@ async def prediction(message: types.Message):
     username = message.from_user.username
     today = date.today()
 
+    # Исключение для @evgeny_pashkin
     if username != "evgeny_pashkin":
         last_request = user_last_request.get(user_id)
         if last_request == today:
