@@ -33,7 +33,7 @@ async def prediction(message: types.Message):
     username = message.from_user.username  # Для бесконечных предсказаний
     today = date.today()
 
-    # 🔒 Проверка: уже получал сегодня, кроме моего аккаунта
+    # 🔒 Проверка: ограничения только для всех, кроме @evgeny_pashkin
     if username != "evgeny_pashkin":
         if user_last_request.get(user_id) == today:
             await message.answer(
@@ -41,11 +41,12 @@ async def prediction(message: types.Message):
                 "Возвращайся за новым предсказанием завтра 🔮"
             )
             return
+        # Обновляем только для обычных пользователей
         user_last_request[user_id] = today
 
     # 🎲 Делаем URL уникальным и используем тег для эмоций человека
     random_number = random.randint(1, 1_000_000)
-    # Тег "face" и "emotion" в LoremFlickr дает крупные планы эмоций человека
+    # Тег "face" и "emotion" в LoremFlickr даёт крупные планы эмоций человека
     image_url = f"https://loremflickr.com/600/800/face,emotion?random={random_number}"
 
     await message.answer_photo(photo=image_url)
