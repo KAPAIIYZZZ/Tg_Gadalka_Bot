@@ -23,7 +23,7 @@ keyboard = ReplyKeyboardMarkup(
 # ---------- ТЕКСТ ПРЕДСКАЗАНИЙ ----------
 
 PART_1 = [
-    "Сегодня", "Скоро", "Сейчас", "В ближайшее время", "Неожиданно", 
+    "Сегодня", "Скоро", "Сейчас", "В ближайшее время", "Неожиданно",
     "В этот день", "Вечером", "Утром", "В любой момент", "В паузе между делами",
     "В тихий час", "Когда меньше всего ждешь", "Незаметно", "Легко", "Просто",
     "С легкой улыбкой", "Судьба шепчет", "Мир намекает", "Сейчас самое время", "Приготовься",
@@ -56,23 +56,41 @@ PART_2 = [
 def generate_fortune_text():
     return f"{random.choice(PART_1)}, {random.choice(PART_2)}."
 
-# ---------- КАРТИНКА ----------
+# ---------- ГЕНЕРАЦИЯ КАРТИНКИ ----------
 
 def generate_image(text: str) -> str:
     width, height = 800, 800
-    image = Image.new("RGB", (width, height), (250, 245, 230))
-    draw = ImageDraw.Draw(image)
 
+    # Градиентный фон
+    base_color = (245, 240, 230)
+    top_color = (220, 210, 200)
+    image = Image.new("RGB", (width, height), base_color)
+    draw = ImageDraw.Draw(image)
+    for i in range(height):
+        ratio = i / height
+        r = int(base_color[0] * (1 - ratio) + top_color[0] * ratio)
+        g = int(base_color[1] * (1 - ratio) + top_color[1] * ratio)
+        b = int(base_color[2] * (1 - ratio) + top_color[2] * ratio)
+        draw.line([(0, i), (width, i)], fill=(r, g, b))
+
+    # Шрифт
     try:
-        font = ImageFont.truetype("arial.ttf", 40)
+        font = ImageFont.truetype("arial.ttf", 50)
     except:
         font = ImageFont.load_default()
 
+    # Перенос текста и автоматическое масштабирование
     margin = 60
-    current_height = 200
+    max_text_width = width - 2 * margin
 
-    for line in wrap_text(text, font, width - 2 * margin):
-        draw.text((margin, current_height), line, fill=(50, 50, 50), font=font)
+    lines = wrap_text(text, font, max_text_width)
+    total_text_height = len(lines) * 60
+    current_height = (height - total_text_height) // 2  # центр по вертикали
+
+    for line in lines:
+        line_width, line_height = draw.textsize(line, font=font)
+        x = (width - line_width) // 2  # центр по горизонтали
+        draw.text((x, current_height), line, fill=(30, 30, 60), font=font)
         current_height += 60
 
     file_path = "fortune.png"
@@ -83,15 +101,14 @@ def wrap_text(text, font, max_width):
     words = text.split()
     lines = []
     current_line = ""
-
     for word in words:
         test_line = current_line + word + " "
         if font.getlength(test_line) <= max_width:
             current_line = test_line
         else:
-            lines.append(current_line)
+            lines.append(current_line.strip())
             current_line = word + " "
-    lines.append(current_line)
+    lines.append(current_line.strip())
     return lines
 
 # ---------- ХЕНДЛЕРЫ ----------
@@ -103,10 +120,10 @@ async def start(message: types.Message):
 @dp.message(lambda m: m.text == "🔮 Получить предсказание")
 async def prediction(message: types.Message):
     user_id = message.from_user.id
-    username = message.from_user.username  # получаем username
+    username = message.from_user.username  # для исключения
     today = date.today()
 
-    # Только для обычных пользователей применяем ограничение
+    # Исключение для @evgeny_pashkin
     if username != "evgeny_pashkin":
         last_request = user_last_request.get(user_id)
         if last_request == today:
@@ -114,13 +131,13 @@ async def prediction(message: types.Message):
                 "Сегодня ты уже получил предсказание. Оно ещё не сказало своё последнее слово."
             )
             return
-        # обновляем дату последнего запроса
         user_last_request[user_id] = today
 
-    # Генерируем текст и картинку для всех пользователей
     text = generate_fortune_text()
     image_path = generate_image(text)
     await message.answer_photo(photo=types.FSInputFile(image_path))
+
+# ---------- MAIN ----------
 
 async def main():
     await dp.start_polling(bot)
