@@ -106,17 +106,20 @@ async def prediction(message: types.Message):
     username = message.from_user.username  # получаем username
     today = date.today()
 
-    # Проверка исключения
+    # Только для обычных пользователей применяем ограничение
     if username != "evgeny_pashkin":
-        if user_last_request.get(user_id) == today:
-            await message.answer("Сегодня ты уже получил предсказание. Оно ещё не сказало своё последнее слово.")
+        last_request = user_last_request.get(user_id)
+        if last_request == today:
+            await message.answer(
+                "Сегодня ты уже получил предсказание. Оно ещё не сказало своё последнее слово."
+            )
             return
-
+        # обновляем дату последнего запроса
         user_last_request[user_id] = today
 
+    # Генерируем текст и картинку для всех пользователей
     text = generate_fortune_text()
     image_path = generate_image(text)
-
     await message.answer_photo(photo=types.FSInputFile(image_path))
 
 async def main():
