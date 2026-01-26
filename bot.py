@@ -20,7 +20,7 @@ keyboard = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# 🔹 Список запросов для генерации картинок
+# 🔹 Список подсказок для предсказаний
 IMAGE_PROMPTS = [
     "mystical abstract landscape, soft pastel colors, floating shapes, ethereal light, surreal",
     "foggy forest path disappearing into distance, dreamy atmosphere, mystical",
@@ -72,16 +72,18 @@ async def prediction(message: types.Message):
             return
         user_last_request[user_id] = today
 
-    # 🎲 Выбираем случайный запрос для картинки
+    # 🎲 Выбираем случайную подсказку
     prompt = random.choice(IMAGE_PROMPTS)
+
+    # 🔹 Формируем теги для URL (берем первые 2-3 ключевых слова)
+    tags = ",".join([word.strip().replace(" ", "_") for word in prompt.split(",")[:3]])
     random_number = random.randint(1, 1_000_000)
 
-    # 🔹 Формируем URL для loremflickr с тегами (для демонстрации используем prompt как тег)
-    # В реальном API можно использовать prompt для генерации
-    image_url = f"https://loremflickr.com/600/800/?{random_number}"
+    # 🔹 URL для картинки с тегами
+    image_url = f"https://loremflickr.com/600/800/{tags}?random={random_number}"
 
-    # ✨ Отправка картинки пользователю
-    await message.answer_photo(photo=image_url, caption=f"Твоя подсказка: {prompt}")
+    # ✨ Отправляем картинку с подписью
+    await message.answer_photo(photo=image_url, caption="🔮 Твоя подсказка")
 
 async def main():
     await dp.start_polling(bot)
