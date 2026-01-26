@@ -20,12 +20,6 @@ keyboard = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# 🔹 Список реальных тегов для LoremFlickr
-TAGS = [
-    "abstract", "nature", "forest", "mountain", "sky", "water",
-    "road", "bridge", "mist", "river", "tree", "island", "desert"
-]
-
 @dp.message(CommandStart())
 async def start(message: types.Message):
     await message.answer(
@@ -39,7 +33,7 @@ async def prediction(message: types.Message):
     username = message.from_user.username  # Для бесконечных предсказаний
     today = date.today()
 
-    # 🔒 Ограничение для всех кроме моего аккаунта
+    # 🔒 Проверка: ограничения только для всех, кроме @evgeny_pashkin
     if username != "evgeny_pashkin":
         if user_last_request.get(user_id) == today:
             await message.answer(
@@ -47,17 +41,15 @@ async def prediction(message: types.Message):
                 "Возвращайся за новым предсказанием завтра 🔮"
             )
             return
+        # Обновляем только для обычных пользователей
         user_last_request[user_id] = today
 
-    # 🎲 Выбираем случайный тег для картинки
-    tag = random.choice(TAGS)
+    # 🎲 Делаем URL уникальным и используем тег для эмоций человека
     random_number = random.randint(1, 1_000_000)
+    # Тег "face" и "emotion" в LoremFlickr даёт крупные планы эмоций человека
+    image_url = f"https://loremflickr.com/600/800/face,emotion?random={random_number}"
 
-    # 🔹 URL для картинки с тегом
-    image_url = f"https://loremflickr.com/600/800/{tag}?random={random_number}"
-
-    # ✨ Отправляем картинку с фиксированной подписью
-    await message.answer_photo(photo=image_url, caption="🔮 Твоя подсказка")
+    await message.answer_photo(photo=image_url)
 
 async def main():
     await dp.start_polling(bot)
