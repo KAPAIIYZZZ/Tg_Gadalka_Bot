@@ -56,42 +56,52 @@ PART_2 = [
 def generate_fortune_text():
     return f"{random.choice(PART_1)}, {random.choice(PART_2)}."
 
-# ---------- ГЕНЕРАЦИЯ КАРТИНКИ ----------
+# ---------- ГЕНЕРАЦИЯ КАРТИНКИ С РАНДОМНЫМ ФОНОМ ----------
 
 def generate_image(text: str) -> str:
     width, height = 800, 800
 
-    # Градиентный фон
-    base_color = (245, 240, 230)
-    top_color = (220, 210, 200)
-    image = Image.new("RGB", (width, height), base_color)
+    # Случайные цвета для градиента фона
+    top_color = tuple(random.randint(200, 255) for _ in range(3))
+    bottom_color = tuple(random.randint(180, 230) for _ in range(3))
+
+    image = Image.new("RGB", (width, height), top_color)
     draw = ImageDraw.Draw(image)
+
+    # Рисуем вертикальный градиент
     for i in range(height):
         ratio = i / height
-        r = int(base_color[0] * (1 - ratio) + top_color[0] * ratio)
-        g = int(base_color[1] * (1 - ratio) + top_color[1] * ratio)
-        b = int(base_color[2] * (1 - ratio) + top_color[2] * ratio)
+        r = int(top_color[0] * (1 - ratio) + bottom_color[0] * ratio)
+        g = int(top_color[1] * (1 - ratio) + bottom_color[1] * ratio)
+        b = int(top_color[2] * (1 - ratio) + bottom_color[2] * ratio)
         draw.line([(0, i), (width, i)], fill=(r, g, b))
 
     # Шрифт
-    try:
-        font = ImageFont.truetype("arial.ttf", 50)
-    except:
-        font = ImageFont.load_default()
+    font_path = "fonts/Roboto-Regular.ttf"  # убедись, что файл есть в папке fonts
+    font_size = 60
+    font = ImageFont.truetype(font_path, font_size)
 
-    # Перенос текста и автоматическое масштабирование
+    # Перенос текста и динамический размер
     margin = 60
     max_text_width = width - 2 * margin
 
-    lines = wrap_text(text, font, max_text_width)
-    total_text_height = len(lines) * 60
-    current_height = (height - total_text_height) // 2  # центр по вертикали
+    # Уменьшаем шрифт, если текст слишком длинный
+    while True:
+        lines = wrap_text(text, font, max_text_width)
+        total_text_height = len(lines) * font_size * 1.2
+        if total_text_height < height - 2 * margin or font_size <= 20:
+            break
+        font_size -= 2
+        font = ImageFont.truetype(font_path, font_size)
+
+    # Центрирование по вертикали
+    current_height = (height - total_text_height) // 2
 
     for line in lines:
         line_width, line_height = draw.textsize(line, font=font)
         x = (width - line_width) // 2  # центр по горизонтали
         draw.text((x, current_height), line, fill=(30, 30, 60), font=font)
-        current_height += 60
+        current_height += int(font_size * 1.2)
 
     file_path = "fortune.png"
     image.save(file_path)
@@ -120,10 +130,9 @@ async def start(message: types.Message):
 @dp.message(lambda m: m.text == "🔮 Получить предсказание")
 async def prediction(message: types.Message):
     user_id = message.from_user.id
-    username = message.from_user.username  # для исключения
+    username = message.from_user.username
     today = date.today()
 
-    # Исключение для @evgeny_pashkin
     if username != "evgeny_pashkin":
         last_request = user_last_request.get(user_id)
         if last_request == today:
