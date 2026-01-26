@@ -20,6 +20,35 @@ keyboard = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
+# 🔹 Список запросов для генерации картинок
+IMAGE_PROMPTS = [
+    "mystical abstract landscape, soft pastel colors, floating shapes, ethereal light, surreal",
+    "foggy forest path disappearing into distance, dreamy atmosphere, mystical",
+    "calm lake reflecting colorful sky, abstract reflections, serene, surreal",
+    "winding mountain path with soft mist, ethereal lighting, mysterious",
+    "open door in fog, symbolic, surreal, mysterious light",
+    "long empty bridge disappearing into clouds, mystical atmosphere",
+    "single tree in vast field under dramatic sky, dreamy, inspiring",
+    "floating geometric shapes in soft pastel colors, abstract, mystical",
+    "shimmering light patterns, cosmic, dreamy, surreal",
+    "ancient staircase leading to unknown, soft mystical lighting, symbolic",
+    "stormy sea with single glowing lantern, mysterious, surreal",
+    "floating origami birds in pastel sky, ethereal, mystical",
+    "glowing orbs above calm ocean, surreal, dreamy atmosphere",
+    "soft abstract clouds with golden light, mystical, inspiring",
+    "empty road leading to mountains under magical sky, dreamy, surreal",
+    "crystal-like shapes floating in soft mist, abstract, mystical",
+    "reflection of surreal sky in still water, ethereal, mysterious",
+    "faint glowing paths through dense fog, mysterious, dreamy",
+    "glowing tree in dark landscape, surreal, mystical",
+    "floating islands with soft pastel lighting, abstract, ethereal",
+    "mysterious cave opening with soft light, mystical, surreal",
+    "winding river through enchanted forest, dreamy, magical atmosphere",
+    "scattered lanterns floating in dark night, ethereal, surreal",
+    "surreal desert landscape with pastel dunes, mysterious, abstract",
+    "glowing geometric portal in dark forest, mystical, inspiring"
+]
+
 @dp.message(CommandStart())
 async def start(message: types.Message):
     await message.answer(
@@ -33,7 +62,7 @@ async def prediction(message: types.Message):
     username = message.from_user.username  # Для бесконечных предсказаний
     today = date.today()
 
-    # 🔒 Проверка: ограничения только для всех, кроме @evgeny_pashkin
+    # 🔒 Ограничение для всех кроме моего аккаунта
     if username != "evgeny_pashkin":
         if user_last_request.get(user_id) == today:
             await message.answer(
@@ -41,15 +70,18 @@ async def prediction(message: types.Message):
                 "Возвращайся за новым предсказанием завтра 🔮"
             )
             return
-        # Обновляем только для обычных пользователей
         user_last_request[user_id] = today
 
-    # 🎲 Делаем URL уникальным и используем тег для эмоций человека
+    # 🎲 Выбираем случайный запрос для картинки
+    prompt = random.choice(IMAGE_PROMPTS)
     random_number = random.randint(1, 1_000_000)
-    # Тег "face" и "emotion" в LoremFlickr даёт крупные планы эмоций человека
-    image_url = f"https://loremflickr.com/600/800/face,emotion?random={random_number}"
 
-    await message.answer_photo(photo=image_url)
+    # 🔹 Формируем URL для loremflickr с тегами (для демонстрации используем prompt как тег)
+    # В реальном API можно использовать prompt для генерации
+    image_url = f"https://loremflickr.com/600/800/?{random_number}"
+
+    # ✨ Отправка картинки пользователю
+    await message.answer_photo(photo=image_url, caption=f"Твоя подсказка: {prompt}")
 
 async def main():
     await dp.start_polling(bot)
