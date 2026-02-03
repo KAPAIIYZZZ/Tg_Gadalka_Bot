@@ -1,74 +1,121 @@
-#!/usr/bin/env python3
 import asyncio
 import os
 import random
-import logging
 from datetime import date
-from typing import Optional, Dict, Any, Set, List
 
 import aiohttp
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
-# Настройка логирования
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
 TOKEN = os.getenv("BOT_TOKEN")
 UNSPLASH_ACCESS_KEY = os.getenv("gcgK3oxK7-RgzpU-99dnMOnz6vzrmujsbClaujuXK40")
-
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
 # user_id -> дата последнего предсказания
-user_last_request: Dict[int, date] = {}
+user_last_request = {}
 
 keyboard = ReplyKeyboardMarkup(
     keyboard=[[KeyboardButton(text="🔮 Получить предсказание")]],
     resize_keyboard=True
 )
 
-# 🔮 Набор визуальных якорей
-UNSPLASH_QUERIES: List[str] = [
-    "fog",
-    "shadow",
-    "reflection",
-    "empty room",
-    "window light",
-    "silhouette",
-    "abandoned place",
-    "lonely chair",
-    "doorway",
-    "stairs",
-    "water surface",
-    "forest path",
-    "night light",
-    "blurred motion",
-    "quiet street",
-    "dark room",
-    "mirror",
-    "corridor",
-    # Добавим ещё немного вариантов, для разнообразия
-    "misty forest",
-    "old house",
-    "vintage interior",
-    "soft light",
-    "lonely bench",
-    "deserted pier",
+# 🔮 Набор визуальных якорей (ОЧЕНЬ ВАЖНО)
+# Запросы специально подобраны для таинственной атмосферы
+UNSPLASH_QUERIES = [
+    "fog mist mysterious",
+    "shadow dark mood",
+    "reflection mirror water",
+    "empty abandoned room",
+    "window light sunrise",
+    "silhouette person",
+    "abandoned house ruins",
+    "lonely chair interior",
+    "doorway passage entrance",
+    "spiral stairs",
+    "water surface calm",
+    "forest path trees",
+    "night light stars",
+    "motion blur speed",
+    "quiet street night",
+    "dark room interior",
+    "mirror reflection",
+    "corridor hallway",
+    "mystery atmosphere",
+    "dream surreal",
 ]
 
-# Чтобы не присылать один и тот же id в рамках одного запуска
-recent_image_ids: Set[str] = set()
-RECENT_CACHE_LIMIT = 200  # держать максимум N id в памяти
+async def get_unsplash_photo(query: str, max_retries: int = 3) -> str | None:
+    """
+    Получает фото с Unsplash по запросу.
+    Использует несколько попыток с разными параметрами.
+    
+    Args:
+        query: Поисковый запрос
+        max_retries: Максимум попыток поиска
+    
+    Returns:
+        URL фото или None если не найдено
+    """
+    for attempt in range(max_retries):
+        try:
+            # Варьируем параметры при повторных попытках
+            page = random.randint(1, 50)
+            per_page = random.randint(10, 30)
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    "https://api.unsplash.com/search/photos",
+                    headers={
+                        "Authorization": f"Client-ID {UNSPLASH_ACCESS_KEY}"
+                    },
+                    params={
+                        "query": query,
+                        "per_page": per_page,
+                        "page": page,
+                        "order_by": "relevant",  # Сортируем по релевантности
+                    },
+                    timeout=aiohttp.ClientTimeout(total=10)
+                ) as response:
+                    # Проверяем статус ответа
+                    if response.status != 200:
+                        print(f"Unsplash API error: {response.status}")
+                        continue
+                    
+                    data = await response.json()
+                    
+                    # Проверяем наличие результатов
+                    if not data.get("results") or len(data["results"]) == 0:
+                        print(f"No results for query: {query}")
+                        continue
+                    
+                    # Берём случайное фото из списка (не первое)
+                    # Это избегает проблем с попадающимися в начале неподходящими фото
+                    random_index = random.randint(0, len(data["results"]) - 1)
+                    image_url = data["results"][random_index]["urls"]["regular"]
+                    
+                    if image_url:
+                        print(f"✓ Got photo for query '{query}'")
+                        return image_url
+                        
+        except asyncio.TimeoutError:
+            print(f"Timeout on attempt {attempt + 1}")
+            continue
+        except aiohttp.ClientError as e:
+            print(f"Network error on attempt {attempt + 1}: {e}")
+            continue
+        except (KeyError, IndexError) as e:
+            print(f"Data parsing error on attempt {attempt + 1}: {e}")
+            continue
+        except Exception as e:
+            print(f"Unexpected error on attempt {attempt + 1}: {e}")
+            continue
+    
+    return None
 
-UNSPLASH_RANDOM_URL = "https://api.unsplash.com/photos/random"
-UNSPLASH_HEADERS = {
-    "Authorization": f"Client-ID {UNSPLASH_ACCESS_KEY}"
-}
 
-# Хендлер /start
 @dp.message(CommandStart())
 async def start(message: types.Message):
     await message.answer(
@@ -76,39 +123,14 @@ async def start(message: types.Message):
         reply_markup=keyboard
     )
 
-# Функция запроса к Unsplash /photos/random
-async def fetch_random_photo(session: aiohttp.ClientSession, query: str) -> Optional[Dict[str, Any]]:
-    params = {
-        "query": query,
-        "orientation": "portrait",
-        # можно добавить "content_filter": "high" если нужно более строгий контент
-    }
-    try:
-        async with session.get(UNSPLASH_RANDOM_URL, headers=UNSPLASH_HEADERS, params=params, timeout=10) as resp:
-            text = await resp.text()
-            if resp.status == 200:
-                # Unsplash возвращает объект (если count не указан) или список (если count>1)
-                data = await resp.json()
-                return data
-            else:
-                # логируем тело ответа для диагностики
-                logger.warning("Unsplash returned status %s for query=%s: %s", resp.status, query, text[:1000])
-                return {"__error_status": resp.status, "__error_text": text}
-    except asyncio.TimeoutError:
-        logger.exception("Timeout при запросе к Unsplash для query=%s", query)
-        return None
-    except Exception:
-        logger.exception("Ошибка при запросе к Unsplash для query=%s", query)
-        return None
 
-# Хендлер кнопки "Получить предсказание"
 @dp.message(lambda m: m.text == "🔮 Получить предсказание")
 async def prediction(message: types.Message):
     user_id = message.from_user.id
-    username = message.from_user.username or ""
+    username = message.from_user.username
     today = date.today()
 
-    # 🔒 Ограничение: все, кроме тебя (как в оригинале)
+    # 🔒 Ограничение: все, кроме тебя
     if username != "evgeny_pashkin":
         if user_last_request.get(user_id) == today:
             await message.answer(
@@ -118,97 +140,30 @@ async def prediction(message: types.Message):
             return
         user_last_request[user_id] = today
 
-    # Попробуем несколько разных запросов (shuffle) чтобы получить разнообразие
-    queries = UNSPLASH_QUERIES.copy()
-    random.shuffle(queries)
+    # Выбираем случайный запрос
+    query = random.choice(UNSPLASH_QUERIES)
+    
+    # Пытаемся получить фото (максимум 3 попытки)
+    image_url = await get_unsplash_photo(query, max_retries=3)
+    
+    if not image_url:
+        await message.answer(
+            "🔮 Судьба задумалась. Попробуй ещё раз."
+        )
+        return
+    
+    try:
+        await message.answer_photo(photo=image_url)
+    except Exception as e:
+        print(f"Error sending photo: {e}")
+        await message.answer(
+            "🔮 Не удалось отправить изображение. Попробуй ещё раз."
+        )
 
-    async with aiohttp.ClientSession() as session:
-        # Поправим логику: попробуем до N разных запросов, и для каждого — несколько попыток
-        for query in queries[:8]:  # не пробуем все 100+ запросов — берем первые 8 случайных
-            for attempt in range(3):
-                data = await fetch_random_photo(session, query)
-                # если None — ошибка сети/таймаут — попробуем снова
-                if data is None:
-                    continue
-
-                # Проверка на явную ошибку статуса
-                if isinstance(data, dict) and data.get("__error_status"):
-                    status = data.get("__error_status")
-                    # При 429 или 403 — возможно лимит; попробуем другой query
-                    if status in (429, 403):
-                        logger.warning("Unsplash rate-limited or forbidden (status=%s). Меняю запрос.", status)
-                        break  # выход на другой query
-                    # Для других статусов попробуем ещё раз
-                    continue
-
-                # Разный формат ответа: объект или список
-                photo_obj = None
-                if isinstance(data, list) and data:
-                    photo_obj = data[0]
-                elif isinstance(data, dict) and data.get("id"):
-                    photo_obj = data
-                else:
-                    # Нечего — попробуем ещё
-                    logger.debug("Пустой/неожиданный ответ от Unsplash для query=%s: %s", query, str(data)[:200])
-                    continue
-
-                # Уникальность: не отправляем тот же id, если уже был недавно
-                photo_id = photo_obj.get("id")
-                if photo_id and photo_id in recent_image_ids:
-                    logger.info("Повторный id %s обнаружен, пропускаю", photo_id)
-                    # попробуем получить другой рандом (повторно)
-                    continue
-
-                # Получаем URL изображения (fallback на разные варианты)
-                urls = photo_obj.get("urls", {})
-                image_url = urls.get("regular") or urls.get("full") or urls.get("small")
-                if not image_url:
-                    logger.warning("Нет URL в объекте фотографии для query=%s: %s", query, photo_obj.get("id"))
-                    continue
-
-                # Сохраняем id в кеш недавних чтобы избегать повторов
-                if photo_id:
-                    recent_image_ids.add(photo_id)
-                    # Обрезаем кеш, если слишком большой
-                    if len(recent_image_ids) > RECENT_CACHE_LIMIT:
-                        # простая обрезка: создаём новый set из последних элементов
-                        # Note: set не гарантирует порядок, но тут важно лишь поддерживать размер
-                        while len(recent_image_ids) > RECENT_CACHE_LIMIT:
-                            recent_image_ids.pop()
-
-                # Собираем подпись (фото + автор + ссылка на Unsplash)
-                author = None
-                try:
-                    user = photo_obj.get("user", {})
-                    author = user.get("name")
-                    profile_link = user.get("links", {}).get("html")
-                except Exception:
-                    profile_link = None
-
-                caption_lines = []
-                if author:
-                    caption_lines.append(f"📷 {author}")
-                    if profile_link:
-                        caption_lines[-1] += f" — {profile_link}"
-                caption_lines.append(f"Тема: {query}")
-
-                caption = "\n".join(caption_lines)
-
-                # Отправляем фото
-                try:
-                    await message.answer_photo(photo=image_url, caption=caption)
-                    return
-                except Exception:
-                    logger.exception("Ошибка при отправке фото пользователю")
-                    await message.answer("🔮 Не удалось отправить изображение, попробуй ещё раз.")
-                    return
-
-        # Если дошли сюда — не смогли получить валидное фото
-        await message.answer("🔮 Судьба задумалась. Попробуй ещё раз чуть позже.")
 
 async def main():
-    logger.info("Бот запускается...")
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
