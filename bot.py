@@ -74,7 +74,7 @@ async def prediction(message: types.Message):
         async with session.get(
             "https://api.unsplash.com/search/photos",
             headers={
-                "Authorization": f"Client-ID {gcgK3oxK7-RgzpU-99dnMOnz6vzrmujsbClaujuXK40}"
+                "Authorization": f"Client-ID {UNSPLASH_ACCESS_KEY}"
             },
             params={
                 "query": query,
