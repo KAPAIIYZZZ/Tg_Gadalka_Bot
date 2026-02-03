@@ -9,7 +9,7 @@ from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
 TOKEN = os.getenv("BOT_TOKEN")
-UNSPLASH_ACCESS_KEY = os.getenv("gcgK3oxK7-RgzpU-99dnMOnz6vzrmujsbClaujuXK40")
+UNSPLASH_ACCESS_KEY = os.getenv("UNSPLASH_ACCESS_KEY")  # ✅ ПРАВИЛЬНО
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -23,7 +23,6 @@ keyboard = ReplyKeyboardMarkup(
 )
 
 # 🔮 Набор визуальных якорей (ОЧЕНЬ ВАЖНО)
-# Запросы специально подобраны для таинственной атмосферы
 UNSPLASH_QUERIES = [
     "fog mist mysterious",
     "shadow dark mood",
@@ -75,29 +74,29 @@ async def get_unsplash_photo(query: str, max_retries: int = 3) -> str | None:
                         "query": query,
                         "per_page": per_page,
                         "page": page,
-                        "order_by": "relevant",  # Сортируем по релевантности
+                        "order_by": "relevant",
                     },
                     timeout=aiohttp.ClientTimeout(total=10)
                 ) as response:
                     # Проверяем статус ответа
                     if response.status != 200:
-                        print(f"Unsplash API error: {response.status}")
+                        print(f"Unsplash API error: {response.status} - attempt {attempt + 1}")
+                        print(f"Response: {await response.text()}")
                         continue
                     
                     data = await response.json()
                     
                     # Проверяем наличие результатов
                     if not data.get("results") or len(data["results"]) == 0:
-                        print(f"No results for query: {query}")
+                        print(f"No results for query: {query} - attempt {attempt + 1}")
                         continue
                     
-                    # Берём случайное фото из списка (не первое)
-                    # Это избегает проблем с попадающимися в начале неподходящими фото
+                    # Берём случайное фото из списка
                     random_index = random.randint(0, len(data["results"]) - 1)
                     image_url = data["results"][random_index]["urls"]["regular"]
                     
                     if image_url:
-                        print(f"✓ Got photo for query '{query}'")
+                        print(f"✓ Got photo for query '{query}': {image_url}")
                         return image_url
                         
         except asyncio.TimeoutError:
@@ -142,6 +141,7 @@ async def prediction(message: types.Message):
 
     # Выбираем случайный запрос
     query = random.choice(UNSPLASH_QUERIES)
+    print(f"Selected query: {query}")
     
     # Пытаемся получить фото (максимум 3 попытки)
     image_url = await get_unsplash_photo(query, max_retries=3)
