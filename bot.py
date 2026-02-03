@@ -33,33 +33,44 @@ user_last_request = {}
 
 keyboard = ReplyKeyboardMarkup(
     keyboard=[[KeyboardButton(text="🔮 Получить предсказание")]],
-    resize_keyboard=True
+    resize_keyboard=True,
+    one_time_keyboard=False
 )
 
-# === СИСТЕМА АРХЕТИПОВ ===
-ARCHETYPES = {
-    "Путь и Выбор": [
-        "crossroads", "misty bridge", "mountain path", "hidden door", "labyrinth"
-    ],
-    "Внутренний Свет": [
-        "candle in dark", "sun rays forest", "lighthouse night", "starry sky", "prism glass"
-    ],
-    "Трансформация": [
-        "butterfly cocoon", "thunderstorm lightning", "melting ice", "burning fire", "flying birds"
-    ],
-    "Созерцание": [
-        "still lake reflection", "zen stones", "raindrops on glass", "old library", "desert dunes"
-    ],
-    "Ресурс и Сила": [
-        "giant oak roots", "ocean waves crashing", "golden field sunset", "mountain peak", "wild horse"
-    ]
-}
+# 🔮 Поисковые запросы
+UNSPLASH_QUERIES = [
+    "open door light",       # Символ новой возможности, которая уже перед тобой.
+    "climbing hand",         # Усилие, преодоление, работа на результат.
+    "holding hands",         # Поддержка, примирение или новое знакомство.
+    "broken glass",          # Предупреждение о хрупкости или необходимости перемен.
+    "compass forest",        # Нужно определиться с направлением, поиск пути.
+    "blank paper pen",       # Время начать с чистого листа, написать свою историю.
+    "flying bird solo",      # Свобода, выход за рамки, одиночное путешествие.
+    "storm lightning",       # Грядут резкие перемены, эмоциональная разрядка.
+    "burning candle",        # Вера, надежда или необходимость сфокусироваться на главном.
+    "old key",               # Решение проблемы уже у тебя в руках, осталось найти замок.
+    "mountain climber",      # Ты почти у цели, нельзя останавливаться.
+    "clock sand",            # Время уходит, не откладывай важное на потом.
+    "sprout through concrete", # Сила и рост вопреки тяжелым обстоятельствам.
+    "dark tunnel light",     # Выход из сложной ситуации уже виден.
+    "locked padlock",        # Пока путь закрыт, нужно поискать другой подход.
+    "autumn leaf water",     # Время отпустить прошлое и плыть по течению.
+    "starry sky night",      # Масштабные мечты, взгляд за горизонт рутины.
+    "chess move",            # Нужно тщательно обдумать следующий шаг.
+    "running person",        # Динамика, спешка или бегство от чего-то.
+    "mirror reflection",     # Пора заглянуть внутрь себя, ответ внутри.
+    "stepping stone river",  # Двигайся осторожно, шаг за шагом.
+    "lighthouse beam",       # Впереди есть ориентир, ты не потеряешься.
+    "closed book",           # Какой-то этап завершен, пора открывать новую главу.
+    "sunrise city",          # Начало чего-то большого и энергичного.
+    "foggy forest path"      # Неопределенность, в которой нужно доверять интуиции.
+]
 
 # === START HANDLER ===
 @dp.message(CommandStart())
 async def start(message: types.Message):
     await message.answer(
-        "🔮 Каждое изображение сегодня — это зеркало твоего завтра.\nНажми кнопку, чтобы получить знак.",
+        "🔮 Хочешь узнать, что приготовила судьба?\nНажми кнопку ниже.",
         reply_markup=keyboard
     )
 
@@ -70,24 +81,28 @@ async def prediction(message: types.Message):
     username = message.from_user.username
     today = date.today()
 
-    # Ограничение (админ — безлимит)
+    # 🔒 Ограничение: 1 раз в день (кроме админа)
     is_admin = (username and username.lower() == "evgeny_pashkin")
+
     if not is_admin:
-        if user_last_request.get(user_id) == today:
-            await message.answer("✨ Твой знак на сегодня уже получен. Приходи завтра.")
+        last_date = user_last_request.get(user_id)
+        if last_date == today:
+            await message.answer(
+                "✨ Сегодня судьба уже сказала своё слово.\n"
+                "Возвращайся за новым предсказанием завтра 🔮"
+            )
             return
         user_last_request[user_id] = today
 
-    # Выбор архетипа и конкретного запроса
-    archetype_name = random.choice(list(ARCHETYPES.keys()))
-    query = random.choice(ARCHETYPES[archetype_name])
-    
-    logger.info(f"User {user_id} | Archetype: {archetype_name} | Query: {query}")
+    query = random.choice(UNSPLASH_QUERIES)
+    logger.info(f"User {user_id} requested prediction. Query: {query}")
 
+    # === Запрос к Unsplash ===
     headers = {
         "Authorization": f"Client-ID {UNSPLASH_ACCESS_KEY}",
         "Accept-Version": "v1"
     }
+
     params = {
         "query": query,
         "orientation": "portrait",
@@ -100,35 +115,36 @@ async def prediction(message: types.Message):
                 "https://api.unsplash.com/photos/random",
                 headers=headers,
                 params=params,
-                timeout=15
+                timeout=10
             ) as response:
                 
                 if response.status != 200:
-                    logger.error(f"Unsplash Error {response.status}")
-                    await message.answer("🔮 Видение затуманено. Попробуй через минуту.")
+                    logger.error(f"❌ Unsplash Error {response.status}: {await response.text()}")
+                    await message.answer("🔮 Туман скрывает будущее. Попробуй еще раз.")
                     return
 
                 data = await response.json()
                 image_url = data.get("urls", {}).get("regular")
                 
-                if image_url:
-                    # Отправляем чистое фото
-                    await message.answer_photo(photo=image_url)
-                else:
-                    await message.answer("🔮 Образ не может проявиться. Попробуй еще раз.")
+                if not image_url:
+                    await message.answer("🔮 Образ будущего неясен.")
+                    return
+                
+                # ИСПРАВЛЕНИЕ: Убрали caption, отправляем только фото
+                await message.answer_photo(photo=image_url)
 
         except Exception as e:
-            logger.exception(f"Request failed: {e}")
-            await message.answer("🔮 Связь с миром образов прервана.")
+            logger.exception(f"❌ Critical Error: {e}")
+            await message.answer("🔮 Связь с космосом прервана.")
 
-# === RUN ===
+# === MAIN ===
 async def main():
     await bot.delete_webhook(drop_pending_updates=True)
-    logger.info("✅ Бот на системе архетипов запущен!")
+    logger.info("✅ Бот запущен (версия без подписей)!")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        pass
+        logger.info("🛑 Бот остановлен")
