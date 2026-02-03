@@ -57,42 +57,55 @@ async def prediction(message: types.Message):
             return
         user_last_request[user_id] = today
 
-    # 🎲 Выбираем случайную коллекцию и страницу
+    # 🎲 Случайная коллекция
     collection_id = random.choice(UNSPLASH_COLLECTIONS)
-    page = random.randint(1, 10)  # можно увеличить диапазон для большего разнообразия
-    per_page = 1  # берем 1 фото на страницу
 
-    # === Запрос к Unsplash Collection Photos ===
     headers = {
         "Authorization": f"Client-ID {UNSPLASH_ACCESS_KEY}"
     }
 
-    params = {
-        "page": page,
-        "per_page": per_page
-    }
-
     async with aiohttp.ClientSession() as session:
-        url = f"https://api.unsplash.com/collections/{collection_id}/photos"
-        async with session.get(url, headers=headers, params=params, timeout=10) as response:
-            if response.status != 200:
-                await message.answer("🔮 Судьба задумалась. Попробуй ещё раз позже.")
-                return
-try:
-    async with session.get(url, headers=headers, params=params, timeout=10) as response:
-        data = await response.json()
-except Exception as e:
-    await message.answer(f"🔮 Судьба задумалась (ошибка API). Попробуй позже.")
-    print("Unsplash API error:", e)
-    return
+        # Шаг 1: получить количество фото в коллекции
+        try:
+            url_info = f"https://api.unsplash.com/collections/{collection_id}"
+            async with session.get(url_info, headers=headers, timeout=10) as resp_info:
+                if resp_info.status != 200:
+                    await message.answer("🔮 Судьба задумалась. Попробуй позже.")
+                    return
+                info_data = await resp_info.json()
+                total_photos = info_data.get("total_photos", 1)
+                if total_photos == 0:
+                    await message.answer("🔮 Картинка не нашлась. Попробуй снова.")
+                    return
+        except Exception as e:
+            await message.answer("🔮 Судьба задумалась. Попробуй позже.")
+            print("Error fetching collection info:", e)
+            return
 
-            data = await response.json()
-            if not data:
-                await message.answer("🔮 Картинка не нашлась. Попробуй снова.")
-                return
+        # Шаг 2: выбрать безопасную случайную страницу
+        per_page = 1
+        max_page = max(1, total_photos // per_page)
+        page = random.randint(1, max_page)
 
-            image_url = data[0]["urls"]["regular"]
+        # Шаг 3: запрос фото из коллекции
+        try:
+            url_photos = f"https://api.unsplash.com/collections/{collection_id}/photos"
+            params = {"page": page, "per_page": per_page}
+            async with session.get(url_photos, headers=headers, params=params, timeout=10) as resp_photos:
+                if resp_photos.status != 200:
+                    await message.answer("🔮 Судьба задумалась. Попробуй позже.")
+                    return
+                photos_data = await resp_photos.json()
+                if not photos_data:
+                    await message.answer("🔮 Картинка не нашлась. Попробуй снова.")
+                    return
+                image_url = photos_data[0]["urls"]["regular"]
+        except Exception as e:
+            await message.answer("🔮 Судьба задумалась. Попробуй позже.")
+            print("Error fetching photo:", e)
+            return
 
+    # ✅ Отправка фото пользователю
     await message.answer_photo(photo=image_url)
 
 # === MAIN ===
@@ -101,4 +114,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
