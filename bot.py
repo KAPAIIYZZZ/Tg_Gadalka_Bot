@@ -46,7 +46,7 @@ async def prediction(message: types.Message):
 
     # 🎲 Делаем URL уникальным и используем **только тег emotion**
     random_number = random.randint(1, 1_000_000)
-    image_url = f"https://loremflickr.com/600/800/divination?random={random_number}"
+    image_url = f"https://loremflickr.com/600/800/Car?random={random_number}"
 
     await message.answer_photo(photo=image_url)
 
