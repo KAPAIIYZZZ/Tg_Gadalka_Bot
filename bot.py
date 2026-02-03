@@ -78,6 +78,13 @@ async def prediction(message: types.Message):
             if response.status != 200:
                 await message.answer("🔮 Судьба задумалась. Попробуй ещё раз позже.")
                 return
+try:
+    async with session.get(url, headers=headers, params=params, timeout=10) as response:
+        data = await response.json()
+except Exception as e:
+    await message.answer(f"🔮 Судьба задумалась (ошибка API). Попробуй позже.")
+    print("Unsplash API error:", e)
+    return
 
             data = await response.json()
             if not data:
