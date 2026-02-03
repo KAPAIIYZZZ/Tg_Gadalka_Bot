@@ -9,27 +9,22 @@ import aiohttp
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-from aiogram.exceptions import TelegramBadRequest
 
 # === НАСТРОЙКА ЛОГИРОВАНИЯ ===
-# Это поможет видеть реальные причины ошибок в логах Railway
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
 # === ENV & CONFIGURATION ===
-# Получаем переменные и сразу чистим их от случайных пробелов
 TOKEN = os.getenv("BOT_TOKEN", "").strip()
 UNSPLASH_ACCESS_KEY = os.getenv("UNSPLASH_ACCESS_KEY", "").strip()
 
-# Проверка наличия ключей перед стартом
 if not TOKEN:
-    logger.critical("❌ ОШИБКА: Не задан BOT_TOKEN в переменных окружения!")
+    logger.critical("❌ ОШИБКА: Не задан BOT_TOKEN!")
     sys.exit(1)
 if not UNSPLASH_ACCESS_KEY:
-    logger.critical("❌ ОШИБКА: Не задан UNSPLASH_ACCESS_KEY в переменных окружения!")
+    logger.critical("❌ ОШИБКА: Не задан UNSPLASH_ACCESS_KEY!")
     sys.exit(1)
 
-# Инициализация бота
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
@@ -42,7 +37,7 @@ keyboard = ReplyKeyboardMarkup(
     one_time_keyboard=False
 )
 
-# 🔮 Поисковые запросы для Unsplash
+# 🔮 Поисковые запросы
 UNSPLASH_QUERIES = [
     "fog", "lonely road", "reflection", "silence", "empty space",
     "light in darkness", "misty landscape", "abandoned place",
@@ -67,7 +62,6 @@ async def prediction(message: types.Message):
     today = date.today()
 
     # 🔒 Ограничение: 1 раз в день (кроме админа)
-    # Проверяем, есть ли username, чтобы избежать ошибок с None
     is_admin = (username and username.lower() == "evgeny_pashkin")
 
     if not is_admin:
@@ -80,7 +74,6 @@ async def prediction(message: types.Message):
             return
         user_last_request[user_id] = today
 
-    # Выбираем случайный запрос
     query = random.choice(UNSPLASH_QUERIES)
     logger.info(f"User {user_id} requested prediction. Query: {query}")
 
@@ -93,7 +86,7 @@ async def prediction(message: types.Message):
     params = {
         "query": query,
         "orientation": "portrait",
-        "content_filter": "high" # Фильтр контента (безопасный поиск)
+        "content_filter": "high"
     }
 
     async with aiohttp.ClientSession() as session:
@@ -105,46 +98,29 @@ async def prediction(message: types.Message):
                 timeout=10
             ) as response:
                 
-                # ЛОГИКА ОБРАБОТКИ ОШИБОК API
-                if response.status == 401:
-                    error_text = await response.text()
-                    logger.error(f"❌ Unsplash 401 Unauthorized: {error_text}")
-                    await message.answer("⚠️ Ошибка авторизации на сервере. Проверьте логи.")
-                    return
-                
-                if response.status == 403:
-                    logger.error("❌ Unsplash 403 Rate Limit Exceeded (лимит запросов исчерпан)")
-                    await message.answer("🔮 Звезды сегодня устали (лимит запросов). Попробуй позже.")
-                    return
-
                 if response.status != 200:
                     logger.error(f"❌ Unsplash Error {response.status}: {await response.text()}")
                     await message.answer("🔮 Туман скрывает будущее. Попробуй еще раз.")
                     return
 
-                # Успешный ответ
                 data = await response.json()
-                
-                # Берем обычную ссылку, но если её нет — raw
                 image_url = data.get("urls", {}).get("regular")
                 
                 if not image_url:
-                    logger.error("❌ URL изображения не найден в ответе Unsplash")
                     await message.answer("🔮 Образ будущего неясен.")
                     return
                 
-                caption_text = f"✨ Твой знак: {query.replace(' ', '_')}"
-                await message.answer_photo(photo=image_url, caption=caption_text)
+                # ИСПРАВЛЕНИЕ: Убрали caption, отправляем только фото
+                await message.answer_photo(photo=image_url)
 
         except Exception as e:
-            logger.exception(f"❌ Critical Error in request: {e}")
-            await message.answer("🔮 Связь с космосом прервана (ошибка сети).")
+            logger.exception(f"❌ Critical Error: {e}")
+            await message.answer("🔮 Связь с космосом прервана.")
 
-# === MAIN ENTRY POINT ===
+# === MAIN ===
 async def main():
-    # Удаляем вебхуки, если были, чтобы бот не тупил при старте
     await bot.delete_webhook(drop_pending_updates=True)
-    logger.info("✅ Бот запущен и готов к работе!")
+    logger.info("✅ Бот запущен (версия без подписей)!")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
