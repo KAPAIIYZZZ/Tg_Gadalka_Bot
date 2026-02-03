@@ -9,7 +9,7 @@ from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
 TOKEN = os.getenv("BOT_TOKEN")
-UNSPLASH_ACCESS_KEY = os.getenv("UNSPLASH_ACCESS_KEY")
+UNSPLASH_ACCESS_KEY = os.getenv("gcgK3oxK7-RgzpU-99dnMOnz6vzrmujsbClaujuXK40")
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -74,7 +74,7 @@ async def prediction(message: types.Message):
         async with session.get(
             "https://api.unsplash.com/search/photos",
             headers={
-                "Authorization": f"Client-ID {UNSPLASH_ACCESS_KEY}"
+                "Authorization": f"Client-ID {gcgK3oxK7-RgzpU-99dnMOnz6vzrmujsbClaujuXK40}"
             },
             params={
                 "query": query,
