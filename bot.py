@@ -1,38 +1,80 @@
+#!/usr/bin/env python3
 import asyncio
 import os
 import random
+import logging
 from datetime import date
+from typing import Optional, Dict, Any, Set, List
 
 import aiohttp
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
-# === ENV ===
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 TOKEN = os.getenv("BOT_TOKEN")
-UNSPLASH_ACCESS_KEY = os.getenv("gcgK3oxK7-RgzpU-99dnMOnz6vzrmujsbClaujuXK40")
+UNSPLASH_ACCESS_KEY = os.getenv("UNSPLASH_ACCESS_KEY")
+
+if not TOKEN:
+    logger.error("BOT_TOKEN не задан. Установи переменную окружения BOT_TOKEN.")
+    raise SystemExit("BOT_TOKEN не задан")
+if not UNSPLASH_ACCESS_KEY:
+    logger.error("UNSPLASH_ACCESS_KEY не задан. Установи переменную окружения UNSPLASH_ACCESS_KEY.")
+    raise SystemExit("UNSPLASH_ACCESS_KEY не задан")
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
 # user_id -> дата последнего предсказания
-user_last_request = {}
+user_last_request: Dict[int, date] = {}
 
 keyboard = ReplyKeyboardMarkup(
     keyboard=[[KeyboardButton(text="🔮 Получить предсказание")]],
     resize_keyboard=True
 )
 
-# === Unsplash Collections для разнообразия ===
-UNSPLASH_COLLECTIONS = [
-    317099,   # Minimalism
-    139386,   # Solitude
-    365219,   # Mood
-    1580860,  # Silence
-    804697,   # Introspection
+# 🔮 Набор визуальных якорей
+UNSPLASH_QUERIES: List[str] = [
+    "fog",
+    "shadow",
+    "reflection",
+    "empty room",
+    "window light",
+    "silhouette",
+    "abandoned place",
+    "lonely chair",
+    "doorway",
+    "stairs",
+    "water surface",
+    "forest path",
+    "night light",
+    "blurred motion",
+    "quiet street",
+    "dark room",
+    "mirror",
+    "corridor",
+    # Добавим ещё немного вариантов, для разнообразия
+    "misty forest",
+    "old house",
+    "vintage interior",
+    "soft light",
+    "lonely bench",
+    "deserted pier",
 ]
 
-# === START ===
+# Чтобы не присылать один и тот же id в рамках одного запуска
+recent_image_ids: Set[str] = set()
+RECENT_CACHE_LIMIT = 200  # держать максимум N id в памяти
+
+UNSPLASH_RANDOM_URL = "https://api.unsplash.com/photos/random"
+UNSPLASH_HEADERS = {
+    "Authorization": f"Client-ID {UNSPLASH_ACCESS_KEY}"
+}
+
+# Хендлер /start
 @dp.message(CommandStart())
 async def start(message: types.Message):
     await message.answer(
@@ -40,14 +82,39 @@ async def start(message: types.Message):
         reply_markup=keyboard
     )
 
-# === PREDICTION ===
+# Функция запроса к Unsplash /photos/random
+async def fetch_random_photo(session: aiohttp.ClientSession, query: str) -> Optional[Dict[str, Any]]:
+    params = {
+        "query": query,
+        "orientation": "portrait",
+        # можно добавить "content_filter": "high" если нужно более строгий контент
+    }
+    try:
+        async with session.get(UNSPLASH_RANDOM_URL, headers=UNSPLASH_HEADERS, params=params, timeout=10) as resp:
+            text = await resp.text()
+            if resp.status == 200:
+                # Unsplash возвращает объект (если count не указан) или список (если count>1)
+                data = await resp.json()
+                return data
+            else:
+                # логируем тело ответа для диагностики
+                logger.warning("Unsplash returned status %s for query=%s: %s", resp.status, query, text[:1000])
+                return {"__error_status": resp.status, "__error_text": text}
+    except asyncio.TimeoutError:
+        logger.exception("Timeout при запросе к Unsplash для query=%s", query)
+        return None
+    except Exception:
+        logger.exception("Ошибка при запросе к Unsplash для query=%s", query)
+        return None
+
+# Хендлер кнопки "Получить предсказание"
 @dp.message(lambda m: m.text == "🔮 Получить предсказание")
 async def prediction(message: types.Message):
     user_id = message.from_user.id
-    username = message.from_user.username
+    username = message.from_user.username or ""
     today = date.today()
 
-    # 🔒 Ограничение: все, кроме тебя
+    # 🔒 Ограничение: все, кроме тебя (как в оригинале)
     if username != "evgeny_pashkin":
         if user_last_request.get(user_id) == today:
             await message.answer(
@@ -57,60 +124,67 @@ async def prediction(message: types.Message):
             return
         user_last_request[user_id] = today
 
-    # 🎲 Случайная коллекция
-    collection_id = random.choice(UNSPLASH_COLLECTIONS)
-
-    headers = {
-        "Authorization": f"Client-ID {UNSPLASH_ACCESS_KEY}"
-    }
+    # Попробуем несколько разных запросов (shuffle) чтобы получить разнообразие
+    queries = UNSPLASH_QUERIES.copy()
+    random.shuffle(queries)
 
     async with aiohttp.ClientSession() as session:
-        # Шаг 1: получить количество фото в коллекции
-        try:
-            url_info = f"https://api.unsplash.com/collections/{collection_id}"
-            async with session.get(url_info, headers=headers, timeout=10) as resp_info:
-                if resp_info.status != 200:
-                    await message.answer("🔮 Судьба задумалась. Попробуй позже.")
-                    return
-                info_data = await resp_info.json()
-                total_photos = info_data.get("total_photos", 1)
-                if total_photos == 0:
-                    await message.answer("🔮 Картинка не нашлась. Попробуй снова.")
-                    return
-        except Exception as e:
-            await message.answer("🔮 Судьба задумалась. Попробуй позже.")
-            print("Error fetching collection info:", e)
-            return
+        # Поправим логику: попробуем до N разных запросов, и для каждого — несколько попыток
+        for query in queries[:8]:  # не пробуем все 100+ запросов — берем первые 8 случайных
+            for attempt in range(3):
+                data = await fetch_random_photo(session, query)
+                # если None — ошибка сети/таймаут — попробуем снова
+                if data is None:
+                    continue
 
-        # Шаг 2: выбрать безопасную случайную страницу
-        per_page = 1
-        max_page = max(1, total_photos // per_page)
-        page = random.randint(1, max_page)
+                # Проверка на явную ошибку статуса
+                if isinstance(data, dict) and data.get("__error_status"):
+                    status = data.get("__error_status")
+                    # При 429 или 403 — возможно лимит; попробуем другой query
+                    if status in (429, 403):
+                        logger.warning("Unsplash rate-limited or forbidden (status=%s). Меняю запрос.", status)
+                        break  # выход на другой query
+                    # Для других статусов попробуем ещё раз
+                    continue
 
-        # Шаг 3: запрос фото из коллекции
-        try:
-            url_photos = f"https://api.unsplash.com/collections/{collection_id}/photos"
-            params = {"page": page, "per_page": per_page}
-            async with session.get(url_photos, headers=headers, params=params, timeout=10) as resp_photos:
-                if resp_photos.status != 200:
-                    await message.answer("🔮 Судьба задумалась. Попробуй позже.")
-                    return
-                photos_data = await resp_photos.json()
-                if not photos_data:
-                    await message.answer("🔮 Картинка не нашлась. Попробуй снова.")
-                    return
-                image_url = photos_data[0]["urls"]["regular"]
-        except Exception as e:
-            await message.answer("🔮 Судьба задумалась. Попробуй позже.")
-            print("Error fetching photo:", e)
-            return
+                # Разный формат ответа: объект или список
+                photo_obj = None
+                if isinstance(data, list) and data:
+                    photo_obj = data[0]
+                elif isinstance(data, dict) and data.get("id"):
+                    photo_obj = data
+                else:
+                    # Нечего — попробуем ещё
+                    logger.debug("Пустой/неожиданный ответ от Unsplash для query=%s: %s", query, str(data)[:200])
+                    continue
 
-    # ✅ Отправка фото пользователю
-    await message.answer_photo(photo=image_url)
+                # Уникальность: не отправляем тот же id, если уже был недавно
+                photo_id = photo_obj.get("id")
+                if photo_id and photo_id in recent_image_ids:
+                    logger.info("Повторный id %s обнаружен, пропускаю", photo_id)
+                    # попробуем получить другой рандом (повторно)
+                    continue
 
-# === MAIN ===
-async def main():
-    await dp.start_polling(bot)
+                # Получаем URL изображения (fallback на разные варианты)
+                urls = photo_obj.get("urls", {})
+                image_url = urls.get("regular") or urls.get("full") or urls.get("small")
+                if not image_url:
+                    logger.warning("Нет URL в объекте фотографии для query=%s: %s", query, photo_obj.get("id"))
+                    continue
 
-if __name__ == "__main__":
-    asyncio.run(main())
+                # Сохраняем id в кеш недавних чтобы избегать повторов
+                if photo_id:
+                    recent_image_ids.add(photo_id)
+                    # Обрезаем кеш, если слишком большой
+                    if len(recent_image_ids) > RECENT_CACHE_LIMIT:
+                        # простая обрезка: создаём новый set из последних элементов
+                        # Note: set не гарантирует порядок, но тут важно лишь поддерживать размер
+                        while len(recent_image_ids) > RECENT_CACHE_LIMIT:
+                            recent_image_ids.pop()
+
+                # Собираем подпись (фото + автор + ссылка на Unsplash)
+                author = None
+                try:
+                    user = photo_obj.get("user", {})
+                    author = user.get("name")
+                    profile_link =
