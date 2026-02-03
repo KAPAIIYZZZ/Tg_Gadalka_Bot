@@ -8,9 +8,8 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
-# === ENV ===
 TOKEN = os.getenv("BOT_TOKEN")
-UNSPLASH_ACCESS_KEY = os.getenv("gcgK3oxK7-RgzpU-99dnMOnz6vzrmujsbClaujuXK40")
+UNSPLASH_ACCESS_KEY = os.getenv("UNSPLASH_ACCESS_KEY")
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -23,26 +22,28 @@ keyboard = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# 🔮 Поисковые запросы для Unsplash (интерпретируемые)
+# 🔮 Набор визуальных якорей (ОЧЕНЬ ВАЖНО)
 UNSPLASH_QUERIES = [
     "fog",
-    "lonely road",
+    "shadow",
     "reflection",
-    "silence",
-    "empty space",
-    "light in darkness",
-    "misty landscape",
+    "empty room",
+    "window light",
+    "silhouette",
     "abandoned place",
-    "open door",
-    "path",
-    "calm water",
-    "distant horizon",
+    "lonely chair",
+    "doorway",
+    "stairs",
+    "water surface",
+    "forest path",
     "night light",
-    "minimal landscape",
-    "soft shadows"
+    "blurred motion",
+    "quiet street",
+    "dark room",
+    "mirror",
+    "corridor",
 ]
 
-# === START ===
 @dp.message(CommandStart())
 async def start(message: types.Message):
     await message.answer(
@@ -50,14 +51,13 @@ async def start(message: types.Message):
         reply_markup=keyboard
     )
 
-# === PREDICTION ===
 @dp.message(lambda m: m.text == "🔮 Получить предсказание")
 async def prediction(message: types.Message):
     user_id = message.from_user.id
     username = message.from_user.username
     today = date.today()
 
-    # 🔒 Ограничение: 1 раз в день (кроме тебя)
+    # 🔒 Ограничение: все, кроме тебя
     if username != "evgeny_pashkin":
         if user_last_request.get(user_id) == today:
             await message.answer(
@@ -68,34 +68,31 @@ async def prediction(message: types.Message):
         user_last_request[user_id] = today
 
     query = random.choice(UNSPLASH_QUERIES)
-
-    # === Запрос к Unsplash ===
-    headers = {
-        "Authorization": f"Client-ID {UNSPLASH_ACCESS_KEY}"
-    }
-
-    params = {
-        "query": query,
-        "orientation": "portrait"
-    }
+    page = random.randint(1, 10)
 
     async with aiohttp.ClientSession() as session:
         async with session.get(
-            "https://api.unsplash.com/photos/random",
-            headers=headers,
-            params=params,
-            timeout=10
+            "https://api.unsplash.com/search/photos",
+            headers={
+                "Authorization": f"Client-ID {UNSPLASH_ACCESS_KEY}"
+            },
+            params={
+                "query": query,
+                "orientation": "portrait",
+                "per_page": 1,
+                "page": page,
+            }
         ) as response:
-            if response.status != 200:
-                await message.answer("🔮 Судьба задумалась. Попробуй чуть позже.")
+            data = await response.json()
+
+            if not data.get("results"):
+                await message.answer("🔮 Судьба задумалась. Попробуй ещё раз.")
                 return
 
-            data = await response.json()
-            image_url = data["urls"]["regular"]
+            image_url = data["results"][0]["urls"]["regular"]
 
     await message.answer_photo(photo=image_url)
 
-# === MAIN ===
 async def main():
     await dp.start_polling(bot)
 
