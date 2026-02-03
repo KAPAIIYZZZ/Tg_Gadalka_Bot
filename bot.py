@@ -18,12 +18,6 @@ logger = logging.getLogger(__name__)
 TOKEN = os.getenv("BOT_TOKEN")
 UNSPLASH_ACCESS_KEY = os.getenv("gcgK3oxK7-RgzpU-99dnMOnz6vzrmujsbClaujuXK40")
 
-if not TOKEN:
-    logger.error("BOT_TOKEN не задан. Установи переменную окружения BOT_TOKEN.")
-    raise SystemExit("BOT_TOKEN не задан")
-if not UNSPLASH_ACCESS_KEY:
-    logger.error("UNSPLASH_ACCESS_KEY не задан. Установи переменную окружения UNSPLASH_ACCESS_KEY.")
-    raise SystemExit("UNSPLASH_ACCESS_KEY не задан")
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
