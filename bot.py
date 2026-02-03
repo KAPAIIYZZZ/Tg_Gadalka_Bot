@@ -187,4 +187,34 @@ async def prediction(message: types.Message):
                 try:
                     user = photo_obj.get("user", {})
                     author = user.get("name")
-                    profile_link =
+                    profile_link = user.get("links", {}).get("html")
+                except Exception:
+                    profile_link = None
+
+                caption_lines = []
+                if author:
+                    caption_lines.append(f"📷 {author}")
+                    if profile_link:
+                        caption_lines[-1] += f" — {profile_link}"
+                caption_lines.append(f"Тема: {query}")
+
+                caption = "\n".join(caption_lines)
+
+                # Отправляем фото
+                try:
+                    await message.answer_photo(photo=image_url, caption=caption)
+                    return
+                except Exception:
+                    logger.exception("Ошибка при отправке фото пользователю")
+                    await message.answer("🔮 Не удалось отправить изображение, попробуй ещё раз.")
+                    return
+
+        # Если дошли сюда — не смогли получить валидное фото
+        await message.answer("🔮 Судьба задумалась. Попробуй ещё раз чуть позже.")
+
+async def main():
+    logger.info("Бот запускается...")
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
